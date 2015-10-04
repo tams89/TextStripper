@@ -1,4 +1,4 @@
 ﻿[<EntryPoint>]
 let main argv = 
-    a.TextStripper.savetextToFile
+    a.TextStripper.savetextToFile()
     0
