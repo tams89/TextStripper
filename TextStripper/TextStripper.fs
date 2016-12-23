@@ -6,6 +6,7 @@ module TextStripper =
     open System.IO
     open System.Net
     open System.Text.RegularExpressions
+    open FSharp.ExcelProvider
     
     // Get all text from within an element by id
     let getText domain = 
@@ -36,7 +37,7 @@ module TextStripper =
                     File.AppendAllText(path,t)
                     File.AppendAllText(path,Environment.NewLine)
                     File.AppendAllText(path,Environment.NewLine)
-            
+
             for link in links do
                 let textBlocks = getText link
                 for text in textBlocks do
