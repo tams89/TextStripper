@@ -8,20 +8,15 @@ module TextStripper =
     open System.Text.RegularExpressions
     
     // Get all text from within an element by id
-    let getText url = 
-        try 
-            let wb = new WebClient()
-            let html = wb.OpenRead(url : string)
-            let doc = new HtmlDocument()
-            doc.Load(html)
-            doc.GetElementbyId("facts-text").InnerText
-        with
-        | :? System.Net.WebException -> 
-            printfn "Error getting text from url: %A" url
-            ""
-        | :? System.NullReferenceException -> 
-            printfn "Error getting text from url: %A" url
-            ""
+    let getText domain = 
+        let wb = new WebClient()
+        wb.OpenRead("http://www.siteworthtraffic.com/update-report/" + domain) |> ignore
+        let html = wb.OpenRead("http://www.siteworthtraffic.com/report/" + domain : string)
+        let doc = new HtmlDocument()
+        doc.Load(html)
+        let paragraph = (doc.DocumentNode.Descendants("p") |> Seq.skip 1 |> Seq.head).InnerText
+        let tables = [ for table in doc.DocumentNode.Descendants("table") -> table.InnerText ]
+        tables  |> Seq.append [ paragraph ] 
     
     // Example execution
     let savetextToFile() = 
@@ -43,8 +38,9 @@ module TextStripper =
                     File.AppendAllText(path,Environment.NewLine)
             
             for link in links do
-                getText link |> writeTextToFile 
-            
+                let textBlocks = getText link
+                for text in textBlocks do
+                    writeTextToFile text
             printfn "Links extracted and saved"
 
         with :? System.Exception -> printfn "Unhandled application error. Please prod Fatman."
