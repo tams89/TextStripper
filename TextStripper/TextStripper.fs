@@ -6,18 +6,18 @@ module TextStripper =
     open System.IO
     open System.Net
     open System.Text.RegularExpressions
-    open FSharp.ExcelProvider
+    open Microsoft.Office.Interop
     
     // Get all text from within an element by id
     let getText domain = 
-        let wb = new WebClient()
-        wb.OpenRead("http://www.siteworthtraffic.com/update-report/" + domain) |> ignore
+        use wb = new WebClient()
+        wb.DownloadString("http://www.siteworthtraffic.com/update-report/" + domain) |> ignore
         let html = wb.OpenRead("http://www.siteworthtraffic.com/report/" + domain : string)
         let doc = new HtmlDocument()
         doc.Load(html)
         let paragraph = (doc.DocumentNode.Descendants("p") |> Seq.skip 1 |> Seq.head).InnerText
         let tables = [ for table in doc.DocumentNode.Descendants("table") -> table.InnerText ]
-        tables  |> Seq.append [ paragraph ] 
+        tables  |> Seq.append [ paragraph ]  |> Seq.append [ domain ] 
     
     // Example execution
     let savetextToFile() = 
@@ -31,17 +31,29 @@ module TextStripper =
                     for l in readLinks do
                         links.Add(l)
             let path = path Environment.SpecialFolder.Desktop + "\\ExtractedText.txt"
-            
-            let writeTextToFile t = 
-                if not (String.IsNullOrEmpty t) then
-                    File.AppendAllText(path,t)
-                    File.AppendAllText(path,Environment.NewLine)
-                    File.AppendAllText(path,Environment.NewLine)
+
+            let xlApp = new Excel.ApplicationClass()
+            let excelPath = Environment.GetFolderPath Environment.SpecialFolder.Desktop + "\\Extracted.xlsx"
+            let xlWorkBook = xlApp.Workbooks.Open(excelPath)
+            xlApp.Visible <- false
+            let xlWorkSheet = xlWorkBook.Worksheets.["Sheet1"] :?> Excel.Worksheet
+
+            let writeTextToFile (t : string []) = 
+                let rec row index (text : string []) = 
+                    let emptyRow = (xlWorkSheet.Cells.Rows.[index] :?> Excel.Range)
+                    let emptyRow = (xlWorkSheet.Cells.Rows.[2] :?> Excel.Range)
+                    if (emptyRow.Cells.Value2 |> string) = "" then 
+                        emptyRow.Value2 <- text
+                    else
+                        row (index + 1) text
+                row 1 t
 
             for link in links do
                 let textBlocks = getText link
-                for text in textBlocks do
-                    writeTextToFile text
+                writeTextToFile (textBlocks |> Seq.toArray)
+
+            xlWorkSheet.SaveAs(excelPath)
+            xlApp.Workbooks.Close()
             printfn "Links extracted and saved"
 
-        with :? System.Exception -> printfn "Unhandled application error. Please prod Fatman."
+        with :? System.Exception as ex -> printfn "%A" ex.InnerException
