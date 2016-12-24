@@ -6,8 +6,8 @@ module TextStripper =
     open System.IO
     open System.Net
     open System.Text.RegularExpressions
-    open Microsoft.Office.Interop
-    
+    open System.Xml
+
     // Get all text from within an element by id
     let getText domain = 
         use wb = new WebClient()
@@ -17,7 +17,7 @@ module TextStripper =
         doc.Load(html)
         let paragraph = (doc.DocumentNode.Descendants("p") |> Seq.skip 1 |> Seq.head).InnerText
         let tables = [ for table in doc.DocumentNode.Descendants("table") -> table.InnerText ]
-        tables  |> Seq.append [ paragraph ]  |> Seq.append [ domain ] 
+        (tables  |> Seq.append [ paragraph ], domain)
     
     // Example execution
     let savetextToFile() = 
@@ -32,28 +32,38 @@ module TextStripper =
                         links.Add(l)
             let path = path Environment.SpecialFolder.Desktop + "\\ExtractedText.txt"
 
-            let xlApp = new Excel.ApplicationClass()
-            let excelPath = Environment.GetFolderPath Environment.SpecialFolder.Desktop + "\\Extracted.xlsx"
-            let xlWorkBook = xlApp.Workbooks.Open(excelPath)
-            xlApp.Visible <- false
-            let xlWorkSheet = xlWorkBook.Worksheets.["Sheet1"] :?> Excel.Worksheet
+            // Create the document
+            let xmlDoc = new XmlDocument()
+            let xmlPath = Environment.GetFolderPath Environment.SpecialFolder.Desktop + "\\Extracted.xml"
 
-            let writeTextToFile (t : string []) = 
-                let rec row index (text : string []) = 
-                    let emptyRow = (xlWorkSheet.Cells.Rows.[index] :?> Excel.Range)
-                    let emptyRow = (xlWorkSheet.Cells.Rows.[2] :?> Excel.Range)
-                    if (emptyRow.Cells.Value2 |> string) = "" then 
-                        emptyRow.Value2 <- text
-                    else
-                        row (index + 1) text
-                row 1 t
+            let dec = xmlDoc.CreateXmlDeclaration("1.0", null, null);
+            xmlDoc.AppendChild dec |> ignore
+
+            let parentNode = xmlDoc.CreateElement "root"
+            xmlDoc.AppendChild parentNode |> ignore
+
+            let writeTextToFile tuple = 
+                let link = tuple |> snd
+                let t = tuple |> fst
+                let domainNode = xmlDoc.CreateElement "domain"
+
+                let linkNode = xmlDoc.CreateElement "link"
+                linkNode.InnerText <- link
+
+                domainNode.AppendChild linkNode |> ignore
+                parentNode.AppendChild domainNode |> ignore
+
+                for block in t do
+                    let paragraphNode = xmlDoc.CreateElement "paragraph"
+                    paragraphNode.InnerText <- block
+                    domainNode.AppendChild (paragraphNode) |> ignore
+
+                xmlDoc.Save(xmlPath)
 
             for link in links do
                 let textBlocks = getText link
-                writeTextToFile (textBlocks |> Seq.toArray)
+                writeTextToFile textBlocks
 
-            xlWorkSheet.SaveAs(excelPath)
-            xlApp.Workbooks.Close()
             printfn "Links extracted and saved"
 
         with :? System.Exception as ex -> printfn "%A" ex.InnerException
